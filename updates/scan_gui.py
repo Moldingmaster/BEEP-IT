@@ -2,7 +2,6 @@
 # Copied from repo root at initial setup; keep this file updated with your latest application code
 # This copy is published to GitHub Pages for devices to fetch.
 
-#!/usr/bin/env python3
 import tkinter as tk
 from tkinter import ttk, messagebox
 import psycopg2
