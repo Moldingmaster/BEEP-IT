@@ -1,16 +1,17 @@
-# Files in this folder are published to GitHub Pages for device updates
+# Private update artifacts (for GitHub Releases)
 
 How to release an update:
 - Edit your application code as needed (e.g., scan_gui.py in repo root).
 - Copy the updated payload into this folder as scan_gui.py.
 - Bump the VERSION file (e.g., 0.1.1 -> 0.1.2).
-- Commit and push changes to main. The GitHub Action will publish:
-  - VERSION
-  - scan_gui.py
-  - scan_gui.py.sha256 (generated)
+- Create and push a tag (e.g., v0.1.2). The workflow will:
+  - Create a GitHub Release for the tag
+  - Attach assets:
+    - scan_gui.py
+    - scan_gui.py.sha256 (generated)
+    - VERSION
 
-Devices will fetch from:
-  https://themadbotterinc.github.io/Maverick-Beep-It/
+Devices fetch from the private GitHub Releases API using a read-only token and will not expose these files publicly.
 
 Payload expectations:
 - The device-side updater downloads scan_gui.py and verifies scan_gui.py.sha256.

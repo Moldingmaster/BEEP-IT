@@ -1,17 +1,16 @@
-name: Publish updates to GH Pages
+name: Publish updates as GitHub Release assets
 
 on:
   push:
-    branches: [ main, master ]
-    paths:
-      - "updates/**"
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,15 +19,21 @@ jobs:
       - name: Prepare dist
         run: |
           set -euo pipefail
+          test -f updates/scan_gui.py || { echo "updates/scan_gui.py not found" >&2; exit 1; }
+          test -f updates/VERSION || { echo "updates/VERSION not found" >&2; exit 1; }
           mkdir -p dist
           cp updates/VERSION dist/VERSION
           cp updates/scan_gui.py dist/scan_gui.py
           (cd dist && sha256sum scan_gui.py > scan_gui.py.sha256)
 
-      - name: Publish to gh-pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          force_orphan: true
-          enable_jekyll: false
+          draft: false
+          prerelease: false
+          files: |
+            dist/scan_gui.py
+            dist/scan_gui.py.sha256
+            dist/VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

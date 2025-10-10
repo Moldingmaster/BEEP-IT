@@ -1,8 +1,9 @@
 [Unit]
-Description=Beep-It updater (pull from GitHub Pages)
+Description=Beep-It updater (private GitHub Releases)
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/default/beep-it-update
 ExecStart=/usr/local/sbin/beep-it-update
