@@ -16,6 +16,7 @@ LOCATION = "North Warehouse Aisle 3"
 JOB_NUMBER = "JOB-2025-102"
 # ----------------------------
 
+
 def get_pi_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -25,6 +26,7 @@ def get_pi_ip():
         return ip
     except Exception:
         return "0.0.0.0"
+
 
 def insert_scan(barcode):
     """Insert scan in background thread."""
@@ -40,11 +42,13 @@ def insert_scan(barcode):
             user=DB_USER, password=DB_PASS
         ) as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (JOB_NUMBER, barcode, pi_ip, LOCATION, scanned_at))
+                cur.execute(sql, (JOB_NUMBER, barcode,
+                            pi_ip, LOCATION, scanned_at))
                 conn.commit()
         return True, f"[{scanned_at.strftime('%H:%M:%S')}] {barcode} → OK"
     except Exception as e:
         return False, f"[ERROR] {e}"
+
 
 class ScanApp(tk.Tk):
     def __init__(self):
@@ -67,16 +71,19 @@ class ScanApp(tk.Tk):
         # Barcode entry
         entry_frame = tk.Frame(self, bg="#1e1e1e")
         entry_frame.pack(pady=30)
-        tk.Label(entry_frame, text="Scan Barcode:", fg="white", bg="#1e1e1e", font=("Segoe UI", 14)).pack()
+        tk.Label(entry_frame, text="Scan Barcode:", fg="white",
+                 bg="#1e1e1e", font=("Segoe UI", 14)).pack()
         self.barcode_var = tk.StringVar()
-        self.barcode_entry = ttk.Entry(entry_frame, textvariable=self.barcode_var, font=("Consolas", 20), width=30)
+        self.barcode_entry = ttk.Entry(
+            entry_frame, textvariable=self.barcode_var, font=("Consolas", 20), width=30)
         self.barcode_entry.pack(pady=10)
         self.barcode_entry.focus_set()
 
         # Log display
         log_frame = tk.Frame(self, bg="#1e1e1e")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        self.log_box = tk.Text(log_frame, bg="#111111", fg="#00FF00", font=("Consolas", 12))
+        self.log_box = tk.Text(log_frame, bg="#111111",
+                               fg="#00FF00", font=("Consolas", 12))
         self.log_box.pack(fill=tk.BOTH, expand=True)
         self.log_box.insert(tk.END, "System ready...\n")
 
@@ -89,7 +96,8 @@ class ScanApp(tk.Tk):
             return
         self.barcode_var.set("")
         self.log_message(f"Scanning: {barcode}")
-        threading.Thread(target=self.log_to_db, args=(barcode,), daemon=True).start()
+        threading.Thread(target=self.log_to_db, args=(
+            barcode,), daemon=True).start()
 
     def log_to_db(self, barcode):
         ok, msg = insert_scan(barcode)
@@ -102,7 +110,7 @@ class ScanApp(tk.Tk):
             self.log_box.tag_add("err", "end-2l", "end-1l")
             self.log_box.tag_config("err", foreground="red")
 
+
 if __name__ == "__main__":
     app = ScanApp()
     app.mainloop()
-
