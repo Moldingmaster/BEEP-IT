@@ -93,11 +93,22 @@ class ScanApp(tk.Tk):
         self.barcode_entry.grid(row=1, column=1, sticky="ew", pady=(0, 20))
         self.barcode_entry.focus_set()
 
+        # Scanned value display (renders immediately before DB call)
+        scanned_label = tk.Label(container, text="Scanned:", bg="#c9c9c9", fg="#111",
+                                 font=label_font, anchor="w")
+        scanned_label.grid(row=2, column=0, padx=(0, 20), pady=(0, 10), sticky="w")
+
+        self.scanned_var = tk.StringVar(value="")
+        self.scanned_box = tk.Label(container, textvariable=self.scanned_var, font=field_font,
+                                    bg="#e6e6e6", fg="#111", bd=2, relief="ridge",
+                                    padx=18, pady=6)
+        self.scanned_box.grid(row=2, column=1, sticky="ew", pady=(0, 10))
+
         # Inline status message
         self.status_var = tk.StringVar(value="Ready")
         self.status_label = tk.Label(container, textvariable=self.status_var,
                                      bg="#c9c9c9", fg="#444", font=("Segoe UI", 14))
-        self.status_label.grid(row=2, column=0, columnspan=2, sticky="w")
+        self.status_label.grid(row=3, column=0, columnspan=2, sticky="w")
 
         # Bottom bar with time and IP
         bottom = tk.Frame(self, bg="#c9c9c9")
@@ -121,6 +132,8 @@ class ScanApp(tk.Tk):
         job_number = self.barcode_var.get().strip()
         if not job_number:
             return
+        # Render scanned value immediately before starting DB call
+        self.scanned_var.set(job_number)
         self.status_var.set(f"Scanning: {job_number}")
         self.barcode_var.set("")
         threading.Thread(target=self.log_to_db, args=(
