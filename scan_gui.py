@@ -42,7 +42,8 @@ def insert_scan(job_number):
         ) as conn:
             with conn.cursor() as cur:
                 # Insert scanned value as the job_number. For compatibility, also store it in barcode.
-                cur.execute(sql, (job_number, job_number, pi_ip, LOCATION, scanned_at))
+                cur.execute(sql, (job_number, job_number,
+                            pi_ip, LOCATION, scanned_at))
                 conn.commit()
         return True, f"[{scanned_at.strftime('%H:%M:%S')}] {job_number} → OK"
     except Exception as e:
@@ -122,7 +123,8 @@ class ScanApp(tk.Tk):
             return
         self.status_var.set(f"Scanning: {job_number}")
         self.barcode_var.set("")
-        threading.Thread(target=self.log_to_db, args=(job_number,), daemon=True).start()
+        threading.Thread(target=self.log_to_db, args=(
+            job_number,), daemon=True).start()
 
     def log_to_db(self, job_number):
         ok, msg = insert_scan(job_number)
