@@ -2,7 +2,7 @@ name: Publish updates to GH Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
     paths:
       - "updates/**"
   workflow_dispatch:
