@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Beep-It updater daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=2h
+Persistent=true
+Unit=beep-it-update.service
+
+[Install]
+WantedBy=timers.target

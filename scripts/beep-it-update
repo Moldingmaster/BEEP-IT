@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 022
+
+# CONFIG: set these for your repo and Pi layout
+REMOTE_BASEURL="https://themadbotterinc.github.io/Maverick-Beep-It"  # GitHub Pages URL
+LOCAL_DIR="/opt/beep_it"
+LOCAL_VERSION_FILE="$LOCAL_DIR/VERSION"
+PAYLOAD_NAME="scan_gui.py"
+TARGET_PATH="$LOCAL_DIR/$PAYLOAD_NAME"
+# Optional: set to your systemd unit to restart after update, or leave empty to skip
+SERVICE_NAME=""
+
+mkdir -p "$LOCAL_DIR"
+: > "$LOCAL_VERSION_FILE"  # ensure file exists
+
+log() { printf "[beep-it-update] %s\n" "$*" >&2; }
+
+# Optional lock (prevents concurrent runs)
+if command -v flock >/dev/null 2>&1; then
+  exec 9>/var/lock/beep-it-update.lock
+  flock -n 9 || { log "another update is running; exiting"; exit 0; }
+fi
+
+TMPDIR="$(mktemp -d)"
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
+
+curl_common=(-fsSL --retry 3 --retry-delay 2 -H "Cache-Control: no-cache")
+
+REMOTE_VERSION="$(curl "${curl_common[@]}" "$REMOTE_BASEURL/VERSION" || true)"
+if [[ -z "${REMOTE_VERSION:-}" ]]; then
+  log "could not fetch remote VERSION; exiting"
+  exit 0
+fi
+
+LOCAL_VERSION="$(cat "$LOCAL_VERSION_FILE" 2>/dev/null || true)"
+if [[ "$REMOTE_VERSION" == "$LOCAL_VERSION" ]]; then
+  log "already up-to-date (version $LOCAL_VERSION)"
+  exit 0
+fi
+
+log "update available: ${LOCAL_VERSION:-none} -> $REMOTE_VERSION"
+
+# Download new payload and checksum
+curl "${curl_common[@]}" -o "$TMPDIR/$PAYLOAD_NAME" "$REMOTE_BASEURL/$PAYLOAD_NAME"
+curl "${curl_common[@]}" -o "$TMPDIR/$PAYLOAD_NAME.sha256" "$REMOTE_BASEURL/$PAYLOAD_NAME.sha256"
+
+# Verify checksum (file must contain a line like: <sha256>  scan_gui.py)
+( cd "$TMPDIR" && sha256sum -c "$PAYLOAD_NAME.sha256" )
+
+# Install atomically
+install -m 0644 "$TMPDIR/$PAYLOAD_NAME" "$TARGET_PATH"
+
+# Persist new version
+printf "%s" "$REMOTE_VERSION" > "$LOCAL_VERSION_FILE"
+
+# Try to restart service if configured and present
+if [[ -n "$SERVICE_NAME" ]] && systemctl list-unit-files | grep -q "^${SERVICE_NAME}"; then
+  systemctl try-restart "$SERVICE_NAME" || log "service restart failed (non-fatal)"
+fi
+
+log "updated to version $REMOTE_VERSION"

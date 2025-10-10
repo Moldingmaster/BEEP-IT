@@ -1,0 +1,8 @@
+[Unit]
+Description=Beep-It updater (pull from GitHub Pages)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/beep-it-update

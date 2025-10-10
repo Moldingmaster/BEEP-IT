@@ -1,0 +1,34 @@
+name: Publish updates to GH Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "updates/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare dist
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp updates/VERSION dist/VERSION
+          cp updates/scan_gui.py dist/scan_gui.py
+          (cd dist && sha256sum scan_gui.py > scan_gui.py.sha256)
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
+          enable_jekyll: false
