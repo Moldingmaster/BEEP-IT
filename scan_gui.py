@@ -13,7 +13,6 @@ DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASS = "your_password"
 LOCATION = "North Warehouse Aisle 3"
-JOB_NUMBER = "JOB-2025-102"
 # ----------------------------
 
 
@@ -28,8 +27,8 @@ def get_pi_ip():
         return "0.0.0.0"
 
 
-def insert_scan(barcode):
-    """Insert scan in background thread."""
+def insert_scan(job_number):
+    """Insert scan in background thread. Scanned value is the job number."""
     pi_ip = get_pi_ip()
     scanned_at = datetime.utcnow()
     sql = """
@@ -42,10 +41,10 @@ def insert_scan(barcode):
             user=DB_USER, password=DB_PASS
         ) as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (JOB_NUMBER, barcode,
-                            pi_ip, LOCATION, scanned_at))
+                # Insert scanned value as the job_number. For compatibility, also store it in barcode.
+                cur.execute(sql, (job_number, job_number, pi_ip, LOCATION, scanned_at))
                 conn.commit()
-        return True, f"[{scanned_at.strftime('%H:%M:%S')}] {barcode} → OK"
+        return True, f"[{scanned_at.strftime('%H:%M:%S')}] {job_number} → OK"
     except Exception as e:
         return False, f"[ERROR] {e}"
 
@@ -53,62 +52,91 @@ def insert_scan(barcode):
 class ScanApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Warehouse Scan Logger")
-        self.geometry("800x480")
-        self.configure(bg="#1e1e1e")
+        self.title("Beep It – Job Scanner")
+        self.geometry("1024x420")
+        self.configure(bg="#c9c9c9")
+        self.minsize(900, 360)
 
-        # Header
-        header = tk.Label(
-            self,
-            text=f"Job: {JOB_NUMBER}   |   Location: {LOCATION}",
-            bg="#333333",
-            fg="white",
-            font=("Segoe UI", 16),
-            pady=10
-        )
-        header.pack(fill=tk.X)
+        # Fonts
+        label_font = ("Segoe UI", 28)
+        field_font = ("Segoe UI", 36, "bold")
+        input_font = ("Consolas", 32)
 
-        # Barcode entry
-        entry_frame = tk.Frame(self, bg="#1e1e1e")
-        entry_frame.pack(pady=30)
-        tk.Label(entry_frame, text="Scan Barcode:", fg="white",
-                 bg="#1e1e1e", font=("Segoe UI", 14)).pack()
+        container = tk.Frame(self, bg="#c9c9c9")
+        container.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+
+        # Grid config
+        container.grid_columnconfigure(0, weight=0)
+        container.grid_columnconfigure(1, weight=1)
+        container.grid_rowconfigure(0, weight=0)
+        container.grid_rowconfigure(1, weight=0)
+        container.grid_rowconfigure(2, weight=1)
+
+        # Location row
+        loc_label = tk.Label(container, text="Location:", bg="#c9c9c9", fg="#111",
+                             font=label_font, anchor="w")
+        loc_label.grid(row=0, column=0, padx=(0, 20), pady=(0, 20), sticky="w")
+
+        loc_box = tk.Label(container, text=LOCATION, font=field_font, bg="#e6e6e6",
+                           fg="#111", bd=2, relief="ridge", padx=18, pady=6)
+        loc_box.grid(row=0, column=1, sticky="ew", pady=(0, 20))
+
+        # Job scan row
+        job_label = tk.Label(container, text="Job # Scan:", bg="#c9c9c9", fg="#111",
+                             font=label_font, anchor="w")
+        job_label.grid(row=1, column=0, padx=(0, 20), pady=(0, 20), sticky="w")
+
         self.barcode_var = tk.StringVar()
-        self.barcode_entry = ttk.Entry(
-            entry_frame, textvariable=self.barcode_var, font=("Consolas", 20), width=30)
-        self.barcode_entry.pack(pady=10)
+        self.barcode_entry = tk.Entry(container, textvariable=self.barcode_var,
+                                      font=input_font, bd=2, relief="ridge")
+        self.barcode_entry.grid(row=1, column=1, sticky="ew", pady=(0, 20))
         self.barcode_entry.focus_set()
 
-        # Log display
-        log_frame = tk.Frame(self, bg="#1e1e1e")
-        log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        self.log_box = tk.Text(log_frame, bg="#111111",
-                               fg="#00FF00", font=("Consolas", 12))
-        self.log_box.pack(fill=tk.BOTH, expand=True)
-        self.log_box.insert(tk.END, "System ready...\n")
+        # Inline status message
+        self.status_var = tk.StringVar(value="Ready")
+        self.status_label = tk.Label(container, textvariable=self.status_var,
+                                     bg="#c9c9c9", fg="#444", font=("Segoe UI", 14))
+        self.status_label.grid(row=2, column=0, columnspan=2, sticky="w")
+
+        # Bottom bar with time and IP
+        bottom = tk.Frame(self, bg="#c9c9c9")
+        bottom.pack(fill=tk.X, side=tk.BOTTOM, padx=16, pady=10)
+
+        self.clock_label = tk.Label(bottom, text="", bg="#c9c9c9",
+                                    fg="#111", font=("Segoe UI", 12))
+        self.clock_label.pack(side=tk.LEFT)
+
+        ip_text = f"IP: {get_pi_ip()}"
+        self.ip_label = tk.Label(bottom, text=ip_text, bg="#c9c9c9",
+                                 fg="#111", font=("Segoe UI", 12))
+        self.ip_label.pack(side=tk.RIGHT)
+
+        self.update_clock()
 
         # Bind Enter key
         self.barcode_entry.bind("<Return>", self.handle_scan)
 
     def handle_scan(self, event):
-        barcode = self.barcode_var.get().strip()
-        if not barcode:
+        job_number = self.barcode_var.get().strip()
+        if not job_number:
             return
+        self.status_var.set(f"Scanning: {job_number}")
         self.barcode_var.set("")
-        self.log_message(f"Scanning: {barcode}")
-        threading.Thread(target=self.log_to_db, args=(
-            barcode,), daemon=True).start()
+        threading.Thread(target=self.log_to_db, args=(job_number,), daemon=True).start()
 
-    def log_to_db(self, barcode):
-        ok, msg = insert_scan(barcode)
+    def log_to_db(self, job_number):
+        ok, msg = insert_scan(job_number)
         self.log_message(msg, error=not ok)
 
     def log_message(self, message, error=False):
-        self.log_box.insert(tk.END, f"{message}\n")
-        self.log_box.see(tk.END)
-        if error:
-            self.log_box.tag_add("err", "end-2l", "end-1l")
-            self.log_box.tag_config("err", foreground="red")
+        self.status_var.set(message)
+        self.status_label.config(fg=("red" if error else "#444"))
+        self.barcode_entry.focus_set()
+
+    def update_clock(self):
+        now = datetime.now().strftime("%m/%d/%Y %I:%M %p")
+        self.clock_label.config(text=now)
+        self.after(1000, self.update_clock)
 
 
 if __name__ == "__main__":
