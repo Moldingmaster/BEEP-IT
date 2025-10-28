@@ -12,7 +12,7 @@ DB_HOST = "100.75.187.68"   # Windows Server (Tailscale IP)
 DB_PORT = 5432
 DB_NAME = "postgres"
 DB_USER = "postgres"
-DB_PASS = "your_password"
+DB_PASS = "RxpJcA7FZRiUCPXhLX8T"
 LOCATION_REFRESH_INTERVAL = 300  # Refresh location from DB every 5 minutes (in seconds)
 # ----------------------------
 
