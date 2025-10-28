@@ -12,16 +12,20 @@ The project includes a GitHub Actions-based auto-update mechanism that allows de
 
 ### Application Layer
 - **scan_gui.py**: Main GUI application (Tkinter) that:
-  - Displays location information
+  - Fetches location dynamically from database based on Pi's hostname
+  - Displays location, hostname, and IP information
   - Accepts barcode scans via keyboard entry
-  - Inserts scan records to PostgreSQL (job_number, barcode, pi_ip, location, scanned_at)
+  - Inserts scan records to PostgreSQL (job_number, barcode, pi_ip, pi_hostname, location, scanned_at)
   - Runs database operations in background threads to avoid blocking UI
-  - Shows real-time clock and device IP address
+  - Refreshes location from database every 5 minutes (configurable)
+  - Auto-registers new Pis with "UNASSIGNED" status
 
 ### Database Layer
 - PostgreSQL database hosted on Windows Server (Tailscale network)
-- Table: `scan_log` with columns: job_number, barcode, pi_ip, location, scanned_at
+- Table: `scan_log` with columns: job_number, barcode, pi_ip, pi_hostname, location, scanned_at
+- Table: `pi_devices` with columns: hostname (PK), location, is_active, last_seen, created_at, updated_at
 - Connection uses psycopg2-binary
+- Admins manage Pi-to-location assignments via `pi_devices` table
 
 ### Update/Distribution Architecture
 - **Development**: Edit `scan_gui.py` in repo root
@@ -117,7 +121,20 @@ Edit these constants at the top of the file:
 - `DB_NAME`: Database name
 - `DB_USER`: Database username
 - `DB_PASS`: Database password
-- `LOCATION`: Physical location string (e.g., "North Warehouse Aisle 3")
+- `LOCATION_REFRESH_INTERVAL`: How often to refresh location from DB in seconds (default: 300 = 5 minutes)
+
+### Pi Device Management
+- Each Pi is uniquely identified by its hostname (retrieved via `socket.gethostname()`)
+- Location assignments are managed in the `pi_devices` database table
+- Admins can reassign Pis to different locations by updating the database
+- See [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) for detailed Pi management instructions
+
+### Database Setup
+Run migrations before first use:
+```bash
+psql -h 100.75.187.68 -U postgres -d postgres -f migrations/001_create_pi_devices.sql
+psql -h 100.75.187.68 -U postgres -d postgres -f migrations/002_add_hostname_to_scan_log.sql
+```
 
 ### Update Script Configuration (scripts/beep-it-update)
 - `OWNER`: GitHub organization/username

@@ -5,6 +5,7 @@ import psycopg2
 import socket
 from datetime import datetime
 import threading
+import time
 
 # ---------- CONFIG ----------
 DB_HOST = "100.75.187.68"   # Windows Server (Tailscale IP)
@@ -12,11 +13,20 @@ DB_PORT = 5432
 DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASS = "your_password"
-LOCATION = "North Warehouse Aisle 3"
+LOCATION_REFRESH_INTERVAL = 300  # Refresh location from DB every 5 minutes (in seconds)
 # ----------------------------
 
 
+def get_hostname():
+    """Get the Pi's hostname for unique identification."""
+    try:
+        return socket.gethostname()
+    except Exception:
+        return "unknown-pi"
+
+
 def get_pi_ip():
+    """Get the Pi's IP address for display purposes."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -27,13 +37,62 @@ def get_pi_ip():
         return "0.0.0.0"
 
 
-def insert_scan(job_number):
+def fetch_location_from_db(hostname):
+    """Fetch assigned location for this Pi from pi_devices table.
+    
+    Returns tuple: (location_string, error_message)
+    If successful, error_message is None.
+    """
+    try:
+        with psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+            user=DB_USER, password=DB_PASS
+        ) as conn:
+            with conn.cursor() as cur:
+                # Fetch location and update last_seen
+                cur.execute(
+                    """SELECT location, is_active FROM pi_devices WHERE hostname = %s""",
+                    (hostname,)
+                )
+                result = cur.fetchone()
+                
+                if result is None:
+                    # Pi not registered - auto-register with placeholder location
+                    placeholder = f"UNASSIGNED ({hostname})"
+                    cur.execute(
+                        """INSERT INTO pi_devices (hostname, location, is_active, last_seen) 
+                           VALUES (%s, %s, FALSE, %s)
+                           ON CONFLICT (hostname) DO NOTHING""",
+                        (hostname, placeholder, datetime.utcnow())
+                    )
+                    conn.commit()
+                    return placeholder, "⚠️  This Pi is not registered. Admin must assign a location."
+                
+                location, is_active = result
+                
+                if not is_active:
+                    return location, "⚠️  This Pi is marked as inactive."
+                
+                # Update last_seen timestamp
+                cur.execute(
+                    """UPDATE pi_devices SET last_seen = %s WHERE hostname = %s""",
+                    (datetime.utcnow(), hostname)
+                )
+                conn.commit()
+                
+                return location, None
+                
+    except Exception as e:
+        return f"ERROR: {hostname}", f"Database error: {e}"
+
+
+def insert_scan(job_number, hostname, location):
     """Insert scan in background thread. Scanned value is the job number."""
     pi_ip = get_pi_ip()
     scanned_at = datetime.utcnow()
     sql = """
-        INSERT INTO scan_log (job_number, barcode, pi_ip, location, scanned_at)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO scan_log (job_number, barcode, pi_ip, pi_hostname, location, scanned_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
     """
     try:
         with psycopg2.connect(
@@ -42,8 +101,7 @@ def insert_scan(job_number):
         ) as conn:
             with conn.cursor() as cur:
                 # Insert scanned value as the job_number. For compatibility, also store it in barcode.
-                cur.execute(sql, (job_number, job_number,
-                            pi_ip, LOCATION, scanned_at))
+                cur.execute(sql, (job_number, job_number, pi_ip, hostname, location, scanned_at))
                 conn.commit()
         return True, f"[{scanned_at.strftime('%H:%M:%S')}] {job_number} → OK"
     except Exception as e:
@@ -57,6 +115,11 @@ class ScanApp(tk.Tk):
         self.geometry("1024x420")
         self.configure(bg="#c9c9c9")
         self.minsize(900, 360)
+        
+        # Pi identification
+        self.hostname = get_hostname()
+        self.location = "Loading..."
+        self.location_error = None
 
         # Fonts
         label_font = ("Segoe UI", 28)
@@ -78,9 +141,10 @@ class ScanApp(tk.Tk):
                              font=label_font, anchor="w")
         loc_label.grid(row=0, column=0, padx=(0, 20), pady=(0, 20), sticky="w")
 
-        loc_box = tk.Label(container, text=LOCATION, font=field_font, bg="#e6e6e6",
+        self.loc_var = tk.StringVar(value=self.location)
+        self.loc_box = tk.Label(container, textvariable=self.loc_var, font=field_font, bg="#e6e6e6",
                            fg="#111", bd=2, relief="ridge", padx=18, pady=6)
-        loc_box.grid(row=0, column=1, sticky="ew", pady=(0, 20))
+        self.loc_box.grid(row=0, column=1, sticky="ew", pady=(0, 20))
 
         # Job scan row
         job_label = tk.Label(container, text="Job # Scan:", bg="#c9c9c9", fg="#111",
@@ -110,7 +174,7 @@ class ScanApp(tk.Tk):
                                      bg="#c9c9c9", fg="#444", font=("Segoe UI", 14))
         self.status_label.grid(row=3, column=0, columnspan=2, sticky="w")
 
-        # Bottom bar with time and IP
+        # Bottom bar with time, hostname, and IP
         bottom = tk.Frame(self, bg="#c9c9c9")
         bottom.pack(fill=tk.X, side=tk.BOTTOM, padx=16, pady=10)
 
@@ -118,12 +182,20 @@ class ScanApp(tk.Tk):
                                     fg="#111", font=("Segoe UI", 12))
         self.clock_label.pack(side=tk.LEFT)
 
+        hostname_text = f"Hostname: {self.hostname}"
+        self.hostname_label = tk.Label(bottom, text=hostname_text, bg="#c9c9c9",
+                                      fg="#111", font=("Segoe UI", 12))
+        self.hostname_label.pack(side=tk.LEFT, padx=(20, 0))
+
         ip_text = f"IP: {get_pi_ip()}"
         self.ip_label = tk.Label(bottom, text=ip_text, bg="#c9c9c9",
                                  fg="#111", font=("Segoe UI", 12))
         self.ip_label.pack(side=tk.RIGHT)
 
+        # Start background tasks
         self.update_clock()
+        self.refresh_location()
+        self.schedule_location_refresh()
 
         # Bind Enter key
         self.barcode_entry.bind("<Return>", self.handle_scan)
@@ -140,7 +212,7 @@ class ScanApp(tk.Tk):
             job_number,), daemon=True).start()
 
     def log_to_db(self, job_number):
-        ok, msg = insert_scan(job_number)
+        ok, msg = insert_scan(job_number, self.hostname, self.location)
         self.log_message(msg, error=not ok)
 
     def log_message(self, message, error=False):
@@ -152,6 +224,37 @@ class ScanApp(tk.Tk):
         now = datetime.now().strftime("%m/%d/%Y %I:%M %p")
         self.clock_label.config(text=now)
         self.after(1000, self.update_clock)
+    
+    def refresh_location(self):
+        """Fetch location from database in background thread."""
+        threading.Thread(target=self._fetch_location_task, daemon=True).start()
+    
+    def _fetch_location_task(self):
+        """Background task to fetch location from DB."""
+        location, error = fetch_location_from_db(self.hostname)
+        self.location = location
+        self.location_error = error
+        
+        # Update UI on main thread
+        self.after(0, self._update_location_ui)
+    
+    def _update_location_ui(self):
+        """Update location display in UI (runs on main thread)."""
+        self.loc_var.set(self.location)
+        
+        # Show warning in status if there's an error
+        if self.location_error:
+            self.status_var.set(self.location_error)
+            self.status_label.config(fg="orange")
+        elif "Loading" not in self.location:
+            self.status_var.set("Ready")
+            self.status_label.config(fg="#444")
+    
+    def schedule_location_refresh(self):
+        """Periodically refresh location from database."""
+        self.refresh_location()
+        # Schedule next refresh
+        self.after(LOCATION_REFRESH_INTERVAL * 1000, self.schedule_location_refresh)
 
 
 if __name__ == "__main__":
