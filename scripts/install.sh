@@ -22,6 +22,37 @@ DEFAULT_DIR="/etc/default"
 log() { printf "[install] %s\n" "$*"; }
 error() { printf "[ERROR] %s\n" "$*" >&2; exit 1; }
 
+# Check for Python 3
+log "Checking for Python 3..."
+if ! command -v python3 &> /dev/null; then
+    error "Python 3 is not installed. Install it with: sudo apt-get install python3 python3-pip python3-venv"
+fi
+
+# Verify Python version (minimum 3.7 for tkinter support)
+PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+PYTHON_MAJOR=$(echo "$PYTHON_VERSION" | cut -d. -f1)
+PYTHON_MINOR=$(echo "$PYTHON_VERSION" | cut -d. -f2)
+
+if [[ "$PYTHON_MAJOR" -lt 3 ]] || { [[ "$PYTHON_MAJOR" -eq 3 ]] && [[ "$PYTHON_MINOR" -lt 7 ]]; }; then
+    error "Python 3.7 or higher is required (found $PYTHON_VERSION). Update Python with: sudo apt-get update && sudo apt-get install python3"
+fi
+
+log "Found Python $PYTHON_VERSION"
+
+# Check for pip3
+if ! command -v pip3 &> /dev/null; then
+    error "pip3 is not installed. Install it with: sudo apt-get install python3-pip"
+fi
+
+# Install system dependencies
+log "Installing system dependencies..."
+apt-get update -qq || error "Failed to update apt package list"
+apt-get install -y \
+    python3-tk \
+    libpq-dev \
+    python3-dev \
+    build-essential || error "Failed to install system dependencies"
+
 # Check if running on Raspberry Pi
 if ! grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ "${FORCE_INSTALL:-}" != "1" ]]; then
     error "This script is designed for Raspberry Pi. Set FORCE_INSTALL=1 to override."
@@ -95,6 +126,9 @@ systemctl daemon-reload
 log "Enabling beep-it.service to start on boot..."
 systemctl enable beep-it.service
 
+log "Starting beep-it.service..."
+systemctl start beep-it.service
+
 # Enable and optionally start the update timer
 log "Enabling beep-it-update.timer..."
 systemctl enable beep-it-update.timer
@@ -109,14 +143,11 @@ log "=============================================="
 log "Installation complete!"
 log "=============================================="
 log ""
-log "Next steps:"
+log "The Beep It application is now running!"
+log ""
 if [[ "${SKIP_UPDATE_START:-false}" == "true" ]]; then
-    log "1. Edit GITHUB_TOKEN_RO at the top of this script"
-    log "2. Re-run this script to configure auto-updates"
-    log "3. Start the application: sudo systemctl start beep-it.service"
-else
-    log "1. Start the application: sudo systemctl start beep-it.service"
-    log "   (Auto-updates are already configured and running)"
+    log "Note: Auto-updates are not configured yet."
+    log "Edit GH_TOKEN_RO at the top of this script and re-run to enable auto-updates."
 fi
 log ""
 log "Useful commands:"
