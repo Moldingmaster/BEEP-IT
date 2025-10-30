@@ -13,7 +13,7 @@ TARGET_PATH="$LOCAL_DIR/$PAYLOAD_NAME"
 # Optional: set to your systemd unit to restart after update, or leave empty to skip
 SERVICE_NAME="beep-it.service"
 # REQUIRED: read-only GitHub token for this private repo (set via systemd EnvironmentFile)
-: "${GITHUB_TOKEN_RO:?GITHUB_TOKEN_RO not set}"
+: "${GH_TOKEN_RO:?GH_TOKEN_RO not set}"
 
 mkdir -p "$LOCAL_DIR"
 : > "$LOCAL_VERSION_FILE"  # ensure file exists
@@ -30,7 +30,7 @@ TMPDIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
 
-curl_common=(-fsSL --retry 3 --retry-delay 2 -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN_RO}" -H "X-GitHub-Api-Version: 2022-11-28")
+curl_common=(-fsSL --retry 3 --retry-delay 2 -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN_RO}" -H "X-GitHub-Api-Version: 2022-11-28")
 
 # Fetch latest release metadata
 RELEASE_JSON=$(curl "${curl_common[@]}" "$API_BASE/releases/latest" || true)
@@ -88,7 +88,7 @@ if [[ -z "$PAYLOAD_URL" || -z "$SUM_URL" ]]; then
 fi
 
 # Download assets (use API token, follow redirects)
-dlc=(-L -f --retry 3 --retry-delay 2 -H "Authorization: Bearer ${GITHUB_TOKEN_RO}" -H "Accept: application/octet-stream")
+dlc=(-L -f --retry 3 --retry-delay 2 -H "Authorization: Bearer ${GH_TOKEN_RO}" -H "Accept: application/octet-stream")
 curl "${dlc[@]}" -o "$TMPDIR/$PAYLOAD_NAME" "$PAYLOAD_URL"
 curl "${dlc[@]}" -o "$TMPDIR/$PAYLOAD_NAME.sha256" "$SUM_URL"
 

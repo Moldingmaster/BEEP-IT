@@ -11,7 +11,7 @@ set -Eeuo pipefail
 # Required scope: repo (read-only access to private repos)
 # Edit this variable with your actual token before deploying
 # ============================================================
-GITHUB_TOKEN_RO="{{GITHUB_TOKEN_RO}}"
+GH_TOKEN_RO="{{GH_TOKEN_RO}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -73,13 +73,13 @@ log "Configuring GitHub token for auto-updates..."
 cat > "$DEFAULT_DIR/beep-it-update" <<EOF
 # GitHub Personal Access Token (read-only) for fetching private releases
 # This token is shared across all Pis
-GITHUB_TOKEN_RO=${GITHUB_TOKEN_RO}
+GH_TOKEN_RO=${GH_TOKEN_RO}
 EOF
 chmod 600 "$DEFAULT_DIR/beep-it-update"
 
-if [[ "$GITHUB_TOKEN_RO" == "{{GITHUB_TOKEN_RO}}" ]]; then
+if [[ "$GH_TOKEN_RO" == "{{GH_TOKEN_RO}}" ]]; then
     log "WARNING: GitHub token is still set to placeholder!"
-    log "Edit the GITHUB_TOKEN_RO variable at the top of this script and re-run."
+    log "Edit the GH_TOKEN_RO variable at the top of this script and re-run."
     log "Auto-updates will not work until the token is configured."
     SKIP_UPDATE_START=true
 else
