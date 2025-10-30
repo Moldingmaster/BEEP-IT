@@ -37,6 +37,50 @@ def get_pi_ip():
         return "0.0.0.0"
 
 
+def ensure_pi_devices_table():
+    """Check if pi_devices table exists and create it if not."""
+    try:
+        with psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+            user=DB_USER, password=DB_PASS
+        ) as conn:
+            with conn.cursor() as cur:
+                # Check if table exists
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'pi_devices'
+                    )
+                """)
+                table_exists = cur.fetchone()[0]
+                
+                if not table_exists:
+                    # Create the table
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS pi_devices (
+                            hostname VARCHAR(255) PRIMARY KEY,
+                            location VARCHAR(255) NOT NULL,
+                            is_active BOOLEAN DEFAULT TRUE,
+                            last_seen TIMESTAMP,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    # Create index
+                    cur.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_pi_devices_active 
+                        ON pi_devices(is_active)
+                    """)
+                    conn.commit()
+                    print("✓ Created pi_devices table")
+                    return True
+                else:
+                    return True
+    except Exception as e:
+        print(f"Error ensuring pi_devices table: {e}")
+        return False
+
+
 def fetch_location_from_db(hostname):
     """Fetch assigned location for this Pi from pi_devices table.
     
@@ -258,5 +302,7 @@ class ScanApp(tk.Tk):
 
 
 if __name__ == "__main__":
+    # Ensure database tables exist before starting GUI
+    ensure_pi_devices_table()
     app = ScanApp()
     app.mainloop()
