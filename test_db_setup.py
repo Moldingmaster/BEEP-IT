@@ -7,7 +7,7 @@ import psycopg2
 import socket
 
 # Database config (same as scan_gui.py)
-DB_HOST = "100.75.187.68"
+DB_HOST = "10.69.1.52"
 DB_PORT = 5432
 DB_NAME = "postgres"
 DB_USER = "postgres"

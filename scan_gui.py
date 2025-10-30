@@ -8,7 +8,7 @@ import threading
 import time
 
 # ---------- CONFIG ----------
-DB_HOST = "100.75.187.68"   # Windows Server (Tailscale IP)
+DB_HOST = "10.69.1.52"   # Windows Server (Internal network)
 DB_PORT = 5432
 DB_NAME = "postgres"
 DB_USER = "postgres"

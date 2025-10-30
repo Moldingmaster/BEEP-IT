@@ -58,7 +58,7 @@ pip3 install -r requirements.txt
 ### Testing Database Connection
 ```bash
 # Edit DB_HOST, DB_PASS, etc. in scan_gui.py first
-python3 -c "import psycopg2; psycopg2.connect(host='100.75.187.68', port=5432, dbname='postgres', user='postgres', password='your_password')"
+python3 -c "import psycopg2; psycopg2.connect(host='10.69.1.52', port=5432, dbname='postgres', user='postgres', password='your_password')"
 ```
 
 ## Releasing Updates
@@ -132,8 +132,8 @@ Edit these constants at the top of the file:
 ### Database Setup
 Run migrations before first use:
 ```bash
-psql -h 100.75.187.68 -U postgres -d postgres -f migrations/001_create_pi_devices.sql
-psql -h 100.75.187.68 -U postgres -d postgres -f migrations/002_add_hostname_to_scan_log.sql
+psql -h 10.69.1.52 -U postgres -d postgres -f migrations/001_create_pi_devices.sql
+psql -h 10.69.1.52 -U postgres -d postgres -f migrations/002_add_hostname_to_scan_log.sql
 ```
 
 ### Update Script Configuration (scripts/beep-it-update)

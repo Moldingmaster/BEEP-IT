@@ -8,14 +8,24 @@ Each Pi is uniquely identified by its **hostname**. Admins manage Pi-to-location
 
 ## Database Setup
 
+### Network Configuration
+
+The PostgreSQL database server is accessible via:
+
+- **Internal Network IP**: `10.69.1.52` (primary, used by default)
+- **Tailscale VPN IP**: `100.75.187.68` (alternative for remote access)
+- **DNS**: `internal.maverickmolding.com`
+
+Pis on the internal network will use `10.69.1.52`. For remote administration or testing via Tailscale, use `100.75.187.68`.
+
 ### 1. Run Migrations
 
 Connect to your PostgreSQL database and run the migration scripts in order:
 
 ```bash
 # From the repository root
-psql -h 100.75.187.68 -U postgres -d postgres -f migrations/001_create_pi_devices.sql
-psql -h 100.75.187.68 -U postgres -d postgres -f migrations/002_add_hostname_to_scan_log.sql
+psql -h 10.69.1.52 -U postgres -d postgres -f migrations/001_create_pi_devices.sql
+psql -h 10.69.1.52 -U postgres -d postgres -f migrations/002_add_hostname_to_scan_log.sql
 ```
 
 Or connect to psql and run manually:
@@ -187,9 +197,12 @@ WHERE hostname = 'the-hostname';
 
 ### Database connection errors
 
-1. Check that the Pi can reach the database server over Tailscale
+1. Check that the Pi can reach the database server:
+   - Internal network: `ping 10.69.1.52`
+   - Tailscale VPN: `ping 100.75.187.68`
 2. Verify database credentials in `scan_gui.py`
 3. Check PostgreSQL logs on the server
+4. If connecting remotely via Tailscale, ensure Tailscale is running and connected
 
 ### Location not updating after reassignment
 
