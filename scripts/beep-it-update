@@ -11,7 +11,7 @@ LOCAL_VERSION_FILE="$LOCAL_DIR/VERSION"
 PAYLOAD_NAME="scan_gui.py"
 TARGET_PATH="$LOCAL_DIR/$PAYLOAD_NAME"
 # Optional: set to your systemd unit to restart after update, or leave empty to skip
-SERVICE_NAME=""
+SERVICE_NAME="beep-it.service"
 # REQUIRED: read-only GitHub token for this private repo (set via systemd EnvironmentFile)
 : "${GITHUB_TOKEN_RO:?GITHUB_TOKEN_RO not set}"
 

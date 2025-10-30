@@ -1,0 +1,17 @@
+[Unit]
+Description=Beep It Job Scanner Application
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/beep_it
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/pi/.Xauthority"
+ExecStart=/usr/bin/python3 /opt/beep_it/scan_gui.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=graphical.target
