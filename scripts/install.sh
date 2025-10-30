@@ -4,6 +4,15 @@ set -Eeuo pipefail
 # Beep It Installation Script for Raspberry Pi
 # This script sets up the Beep It application to run on startup
 
+# ============================================================
+# GitHub Personal Access Token (read-only) for auto-updates
+# This token is shared across all Pis for fetching releases
+# Generate at: https://github.com/settings/tokens
+# Required scope: repo (read-only access to private repos)
+# Edit this variable with your actual token before deploying
+# ============================================================
+GITHUB_TOKEN_RO="{{GITHUB_TOKEN_RO}}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 INSTALL_DIR="/opt/beep_it"
@@ -60,15 +69,22 @@ install -m 0644 "$REPO_ROOT/contrib/systemd/beep-it-update.service" "$SYSTEMD_DI
 install -m 0644 "$REPO_ROOT/contrib/systemd/beep-it-update.timer" "$SYSTEMD_DIR/beep-it-update.timer"
 
 # Configure environment for updater
-if [[ ! -f "$DEFAULT_DIR/beep-it-update" ]]; then
-    log "Creating environment file for auto-updater..."
-    cat > "$DEFAULT_DIR/beep-it-update" <<'EOF'
+log "Configuring GitHub token for auto-updates..."
+cat > "$DEFAULT_DIR/beep-it-update" <<EOF
 # GitHub Personal Access Token (read-only) for fetching private releases
-# Generate one at: https://github.com/settings/tokens
-# Required scope: repo (read-only access to private repositories)
-GITHUB_TOKEN_RO=
+# This token is shared across all Pis
+GITHUB_TOKEN_RO=${GITHUB_TOKEN_RO}
 EOF
-    log "WARNING: You must set GITHUB_TOKEN_RO in $DEFAULT_DIR/beep-it-update"
+chmod 600 "$DEFAULT_DIR/beep-it-update"
+
+if [[ "$GITHUB_TOKEN_RO" == "{{GITHUB_TOKEN_RO}}" ]]; then
+    log "WARNING: GitHub token is still set to placeholder!"
+    log "Edit the GITHUB_TOKEN_RO variable at the top of this script and re-run."
+    log "Auto-updates will not work until the token is configured."
+    SKIP_UPDATE_START=true
+else
+    log "GitHub token configured successfully!"
+    SKIP_UPDATE_START=false
 fi
 
 # Reload systemd
@@ -79,9 +95,14 @@ systemctl daemon-reload
 log "Enabling beep-it.service to start on boot..."
 systemctl enable beep-it.service
 
-# Enable the update timer (but don't start it yet - user needs to configure token first)
+# Enable and optionally start the update timer
 log "Enabling beep-it-update.timer..."
 systemctl enable beep-it-update.timer
+
+if [[ "${SKIP_UPDATE_START:-false}" == "false" ]]; then
+    log "Starting beep-it-update.timer..."
+    systemctl start beep-it-update.timer
+fi
 
 log ""
 log "=============================================="
@@ -89,9 +110,14 @@ log "Installation complete!"
 log "=============================================="
 log ""
 log "Next steps:"
-log "1. Edit $DEFAULT_DIR/beep-it-update and add your GitHub token"
-log "2. Start the application: sudo systemctl start beep-it.service"
-log "3. Start the update timer: sudo systemctl start beep-it-update.timer"
+if [[ "${SKIP_UPDATE_START:-false}" == "true" ]]; then
+    log "1. Edit GITHUB_TOKEN_RO at the top of this script"
+    log "2. Re-run this script to configure auto-updates"
+    log "3. Start the application: sudo systemctl start beep-it.service"
+else
+    log "1. Start the application: sudo systemctl start beep-it.service"
+    log "   (Auto-updates are already configured and running)"
+fi
 log ""
 log "Useful commands:"
 log "  - Check app status:    sudo systemctl status beep-it.service"
