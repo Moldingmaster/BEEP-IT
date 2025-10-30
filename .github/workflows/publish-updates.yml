@@ -25,6 +25,10 @@ jobs:
           cp updates/VERSION dist/VERSION
           cp updates/scan_gui.py dist/scan_gui.py
           (cd dist && sha256sum scan_gui.py > scan_gui.py.sha256)
+          
+          # Inject GitHub token into install script
+          sed "s/{{GITHUB_TOKEN_RO}}/${{ secrets.GITHUB_TOKEN_RO }}/g" scripts/install.sh > dist/install.sh
+          chmod +x dist/install.sh
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
@@ -35,5 +39,6 @@ jobs:
             dist/scan_gui.py
             dist/scan_gui.py.sha256
             dist/VERSION
+            dist/install.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
