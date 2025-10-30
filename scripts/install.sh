@@ -49,9 +49,7 @@ log "Installing system dependencies..."
 apt-get update -qq || error "Failed to update apt package list"
 apt-get install -y \
     python3-tk \
-    libpq-dev \
-    python3-dev \
-    build-essential || error "Failed to install system dependencies"
+    python3-psycopg2 || error "Failed to install system dependencies"
 
 # Check if running on Raspberry Pi
 if ! grep -q "Raspberry Pi" /proc/cpuinfo 2>/dev/null && [[ "${FORCE_INSTALL:-}" != "1" ]]; then
@@ -80,14 +78,8 @@ else
     echo "0.0.0" > "$INSTALL_DIR/VERSION"
 fi
 
-# Install Python dependencies
-log "Installing Python dependencies..."
-if [[ -f "$REPO_ROOT/requirements.txt" ]]; then
-    pip3 install -r "$REPO_ROOT/requirements.txt" || error "Failed to install Python dependencies"
-else
-    log "WARNING: requirements.txt not found, installing known dependencies..."
-    pip3 install psycopg2-binary
-fi
+# Note: Python dependencies are now installed via apt (python3-psycopg2)
+# No pip installation needed
 
 # Install systemd service for the application
 log "Installing systemd service: beep-it.service"
