@@ -6,6 +6,8 @@ import socket
 from datetime import datetime
 import threading
 import time
+import re
+import os
 
 # ---------- CONFIG ----------
 DB_HOST = "10.69.1.52"   # Windows Server (Internal network)
@@ -14,6 +16,7 @@ DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASS = "RxpJcA7FZRiUCPXhLX8T"
 LOCATION_REFRESH_INTERVAL = 300  # Refresh location from DB every 5 minutes (in seconds)
+VERSION = "0.1.3"  # Application version
 # ----------------------------
 
 
@@ -35,6 +38,18 @@ def get_pi_ip():
         return ip
     except Exception:
         return "0.0.0.0"
+
+
+def get_version():
+    """Get application version from VERSION file or fallback to constant."""
+    try:
+        version_file = os.path.join(os.path.dirname(__file__), 'updates', 'VERSION')
+        if os.path.exists(version_file):
+            with open(version_file, 'r') as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return VERSION
 
 
 def ensure_pi_devices_table():
@@ -130,6 +145,56 @@ def fetch_location_from_db(hostname):
         return f"ERROR: {hostname}", f"Database error: {e}"
 
 
+def validate_job_number(job_number):
+    """Validate job number according to business rules.
+    
+    Rules:
+    - Must be 5 to 8 characters in length
+    - No symbols other than "-"
+    - Must have at least 5 digits before "-" (if dash exists)
+    - If "-" exists, suffix must be single digit 1-9, optionally followed by "R"
+    - No letters (except "R" immediately after digit in suffix)
+    - Must start with 5, 6, 7, or 8
+    
+    Returns: (is_valid, error_message)
+    """
+    # Check length
+    if len(job_number) < 5 or len(job_number) > 8:
+        return False, "Job number must be 5-8 characters"
+    
+    # Must start with 5, 6, 7, or 8
+    if job_number[0] not in ['5', '6', '7', '8']:
+        return False, "Job number must start with 5, 6, 7, or 8"
+    
+    # Check for invalid symbols (only digits, "-", and "R" allowed)
+    if not re.match(r'^[5-8][0-9\-R]+$', job_number):
+        return False, "Invalid characters (only digits, '-', and 'R' allowed)"
+    
+    # Split on dash if present
+    if '-' in job_number:
+        parts = job_number.split('-')
+        
+        # Only one dash allowed
+        if len(parts) != 2:
+            return False, "Only one '-' allowed"
+        
+        prefix, suffix = parts
+        
+        # Prefix must be at least 5 digits
+        if not prefix.isdigit() or len(prefix) < 5:
+            return False, "At least 5 digits required before '-'"
+        
+        # Suffix must be single digit 1-9, optionally followed by R
+        if not re.match(r'^[1-9]R?$', suffix):
+            return False, "After '-': single digit 1-9, optionally followed by 'R'"
+    else:
+        # No dash: must be all digits (R not allowed without dash)
+        if not job_number.isdigit():
+            return False, "Job number without '-' must be all digits"
+    
+    return True, ""
+
+
 def insert_scan(job_number, hostname, location):
     """Insert scan in background thread. Scanned value is the job number."""
     pi_ip = get_pi_ip()
@@ -159,6 +224,9 @@ class ScanApp(tk.Tk):
         self.geometry("1024x420")
         self.configure(bg="#c9c9c9")
         self.minsize(900, 360)
+        
+        # Remove window decorations (title bar, close button, etc.)
+        self.overrideredirect(True)
         
         # Pi identification
         self.hostname = get_hostname()
@@ -218,7 +286,7 @@ class ScanApp(tk.Tk):
                                      bg="#c9c9c9", fg="#444", font=("Segoe UI", 14))
         self.status_label.grid(row=3, column=0, columnspan=2, sticky="w")
 
-        # Bottom bar with time, hostname, and IP
+        # Bottom bar with time, hostname, IP, and version
         bottom = tk.Frame(self, bg="#c9c9c9")
         bottom.pack(fill=tk.X, side=tk.BOTTOM, padx=16, pady=10)
 
@@ -236,6 +304,11 @@ class ScanApp(tk.Tk):
                                  fg="#111", font=("Segoe UI", 12))
         self.ip_label.pack(side=tk.RIGHT)
 
+        version_text = f"v{get_version()}"
+        self.version_label = tk.Label(bottom, text=version_text, bg="#c9c9c9",
+                                      fg="#666", font=("Segoe UI", 10))
+        self.version_label.pack(side=tk.RIGHT, padx=(0, 20))
+
         # Start background tasks
         self.update_clock()
         self.refresh_location()
@@ -248,12 +321,63 @@ class ScanApp(tk.Tk):
         job_number = self.barcode_var.get().strip()
         if not job_number:
             return
+        
+        # Validate job number
+        is_valid, error_msg = validate_job_number(job_number)
+        if not is_valid:
+            self.show_validation_error(error_msg)
+            self.barcode_var.set("")
+            return
+        
         # Render scanned value immediately before starting DB call
         self.scanned_var.set(job_number)
         self.status_var.set(f"Scanning: {job_number}")
         self.barcode_var.set("")
         threading.Thread(target=self.log_to_db, args=(
             job_number,), daemon=True).start()
+    
+    def show_validation_error(self, message):
+        """Show validation error popup that auto-dismisses after 2 seconds."""
+        # Create popup window
+        popup = tk.Toplevel(self)
+        popup.title("Validation Error")
+        popup.configure(bg="#ffebee")
+        popup.overrideredirect(True)  # Remove window decorations
+        
+        # Center the popup
+        popup_width = 600
+        popup_height = 200
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width - popup_width) // 2
+        y = (screen_height - popup_height) // 2
+        popup.geometry(f"{popup_width}x{popup_height}+{x}+{y}")
+        
+        # Error message
+        error_label = tk.Label(
+            popup,
+            text="❌ Invalid Job Number",
+            font=("Segoe UI", 24, "bold"),
+            bg="#ffebee",
+            fg="#c62828"
+        )
+        error_label.pack(pady=(30, 10))
+        
+        detail_label = tk.Label(
+            popup,
+            text=message,
+            font=("Segoe UI", 18),
+            bg="#ffebee",
+            fg="#c62828",
+            wraplength=550
+        )
+        detail_label.pack(pady=(0, 30))
+        
+        # Auto-dismiss after 2 seconds
+        popup.after(2000, popup.destroy)
+        
+        # Keep focus on main window's entry field
+        self.after(100, self.barcode_entry.focus_set)
 
     def log_to_db(self, job_number):
         ok, msg = insert_scan(job_number, self.hostname, self.location)

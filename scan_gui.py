@@ -16,7 +16,7 @@ DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASS = "RxpJcA7FZRiUCPXhLX8T"
 LOCATION_REFRESH_INTERVAL = 300  # Refresh location from DB every 5 minutes (in seconds)
-VERSION = "0.1.2"  # Application version
+VERSION = "0.1.3"  # Application version
 # ----------------------------
 
 
