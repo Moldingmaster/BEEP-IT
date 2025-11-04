@@ -16,7 +16,7 @@ SERVICE_NAME="beep-it.service"
 : "${GH_TOKEN_RO:?GH_TOKEN_RO not set}"
 
 mkdir -p "$LOCAL_DIR"
-: > "$LOCAL_VERSION_FILE"  # ensure file exists
+touch "$LOCAL_VERSION_FILE"  # ensure file exists
 
 log() { printf "[beep-it-update] %s\n" "$*" >&2; }
 
