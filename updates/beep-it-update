@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 022
+
+# CONFIG
+OWNER="TheMadBotterINC"
+REPO="Maverick-Beep-It"
+API_BASE="https://api.github.com/repos/$OWNER/$REPO"
+LOCAL_DIR="/opt/beep_it"
+LOCAL_VERSION_FILE="$LOCAL_DIR/VERSION"
+PAYLOAD_NAME="scan_gui.py"
+TARGET_PATH="$LOCAL_DIR/$PAYLOAD_NAME"
+# Optional: set to your systemd unit to restart after update, or leave empty to skip
+SERVICE_NAME="beep-it.service"
+# REQUIRED: read-only GitHub token for this private repo (set via systemd EnvironmentFile)
+: "${GH_TOKEN_RO:?GH_TOKEN_RO not set}"
+
+mkdir -p "$LOCAL_DIR"
+touch "$LOCAL_VERSION_FILE"  # ensure file exists
+
+log() { printf "[beep-it-update] %s\n" "$*" >&2; }
+
+# Optional lock (prevents concurrent runs)
+if command -v flock >/dev/null 2>&1; then
+  exec 9>/var/lock/beep-it-update.lock
+  flock -n 9 || { log "another update is running; exiting"; exit 0; }
+fi
+
+TMPDIR="$(mktemp -d)"
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
+
+curl_common=(-fsSL --retry 3 --retry-delay 2 -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN_RO}" -H "X-GitHub-Api-Version: 2022-11-28")
+
+# Fetch latest release metadata
+RELEASE_JSON=$(curl "${curl_common[@]}" "$API_BASE/releases/latest" || true)
+if [[ -z "$RELEASE_JSON" || "$RELEASE_JSON" == *"API rate limit"* ]]; then
+  log "could not fetch latest release metadata; exiting"
+  exit 0
+fi
+
+# Extract tag_name using python3 (fallback to jq if available)
+if command -v python3 >/dev/null 2>&1; then
+  REMOTE_VERSION=$(python3 - <<'PY'
+import sys, json
+j=json.load(sys.stdin)
+print(j.get('tag_name',''))
+PY
+<<<"$RELEASE_JSON")
+else
+  REMOTE_VERSION=$(echo "$RELEASE_JSON" | jq -r .tag_name 2>/dev/null || true)
+fi
+
+if [[ -z "${REMOTE_VERSION:-}" ]]; then
+  log "could not extract tag_name from release; exiting"
+  exit 0
+fi
+
+LOCAL_VERSION="$(cat "$LOCAL_VERSION_FILE" 2>/dev/null || true)"
+if [[ "$REMOTE_VERSION" == "$LOCAL_VERSION" ]]; then
+  log "already up-to-date (version $LOCAL_VERSION)"
+  exit 0
+fi
+
+log "update available: ${LOCAL_VERSION:-none} -> $REMOTE_VERSION"
+
+# Get asset download URLs from release JSON
+if command -v python3 >/dev/null 2>&1; then
+  readarray -t urls < <(python3 - <<'PY'
+import sys, json
+j=json.load(sys.stdin)
+assets={a['name']:a.get('browser_download_url') for a in j.get('assets',[])}
+for k in ('scan_gui.py','scan_gui.py.sha256'):
+    print(assets.get(k,''))
+PY
+<<<"$RELEASE_JSON")
+else
+  # jq fallback
+  readarray -t urls < <(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name=="scan_gui.py" or .name=="scan_gui.py.sha256") | .browser_download_url' 2>/dev/null)
+fi
+
+PAYLOAD_URL="${urls[0]:-}"
+SUM_URL="${urls[1]:-}"
+
+if [[ -z "$PAYLOAD_URL" || -z "$SUM_URL" ]]; then
+  log "required assets not found in latest release; exiting"
+  exit 0
+fi
+
+# Download assets (use API token, follow redirects)
+dlc=(-L -f --retry 3 --retry-delay 2 -H "Authorization: Bearer ${GH_TOKEN_RO}" -H "Accept: application/octet-stream")
+curl "${dlc[@]}" -o "$TMPDIR/$PAYLOAD_NAME" "$PAYLOAD_URL"
+curl "${dlc[@]}" -o "$TMPDIR/$PAYLOAD_NAME.sha256" "$SUM_URL"
+
+# Verify checksum
+( cd "$TMPDIR" && sha256sum -c "$PAYLOAD_NAME.sha256" )
+
+# Install atomically
+install -m 0644 "$TMPDIR/$PAYLOAD_NAME" "$TARGET_PATH"
+
+# Persist new version
+printf "%s" "$REMOTE_VERSION" > "$LOCAL_VERSION_FILE"
+
+# Try to restart service if configured and present
+if [[ -n "$SERVICE_NAME" ]] && systemctl list-unit-files | grep -q "^${SERVICE_NAME}"; then
+  systemctl try-restart "$SERVICE_NAME" || log "service restart failed (non-fatal)"
+fi
+
+log "updated to version $REMOTE_VERSION"
