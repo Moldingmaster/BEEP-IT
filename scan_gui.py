@@ -160,6 +160,9 @@ class ScanApp(tk.Tk):
         self.configure(bg="#c9c9c9")
         self.minsize(900, 360)
         
+        # Remove window decorations (title bar, close button, etc.)
+        self.overrideredirect(True)
+        
         # Pi identification
         self.hostname = get_hostname()
         self.location = "Loading..."
