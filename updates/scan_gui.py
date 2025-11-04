@@ -16,7 +16,7 @@ DB_NAME = "postgres"
 DB_USER = "postgres"
 DB_PASS = "RxpJcA7FZRiUCPXhLX8T"
 LOCATION_REFRESH_INTERVAL = 300  # Refresh location from DB every 5 minutes (in seconds)
-VERSION = "0.1.3"  # Application version
+VERSION = "0.1.4"  # Application version
 # ----------------------------
 
 
@@ -221,12 +221,14 @@ class ScanApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Beep It – Job Scanner")
-        self.geometry("1024x420")
         self.configure(bg="#c9c9c9")
-        self.minsize(900, 360)
         
         # Remove window decorations (title bar, close button, etc.)
         self.overrideredirect(True)
+        
+        # Make window fullscreen and position at 0,0
+        self.attributes('-fullscreen', True)
+        self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
         
         # Pi identification
         self.hostname = get_hostname()
